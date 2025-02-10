@@ -1,5 +1,6 @@
 import pygame
 import sys
+import queue
 
 class Player:
     def __init__(self, x, y):
@@ -7,7 +8,6 @@ class Player:
         self.velocity = pygame.math.Vector2(0, 0)
         self.facing = 'right'
         self.is_grounded = False
-        self.jump_power = 15
         self.speed = 5
         self.friction = 0.8
 
@@ -31,7 +31,7 @@ def load_level(filename):
                         found_start = True
     return platforms, start_x, start_y
 
-def start_game():
+def start_game(jump_queue):
     pygame.init()
     screen_width = 800
     screen_height = 600
@@ -69,9 +69,19 @@ def start_game():
         if keys[pygame.K_RIGHT]:
             player.facing = 'right'
 
-        # Jumping
-        if keys[pygame.K_SPACE] and player.is_grounded:
-            player.velocity.y = -player.jump_power
+        # Process jump events from queue
+        jump_forces = []
+        while not jump_queue.empty():
+            try:
+                jump_force = jump_queue.get_nowait()
+                jump_forces.append(jump_force)
+            except queue.Empty:
+                break
+
+        if jump_forces and player.is_grounded:
+            # Use the maximum jump force detected
+            max_force = max(jump_forces)
+            player.velocity.y = -max_force
             player.velocity.x = player.speed if player.facing == 'right' else -player.speed
             player.is_grounded = False
 
@@ -117,7 +127,7 @@ def start_game():
         for platform in platforms:
             adjusted_pos = (platform.x - camera.x, platform.y - camera.y)
             color = BLUE if (platform.y == player.rect.bottom + 50) else GREEN
-            pygame.draw.rect(screen, GREEN, (*adjusted_pos, platform.width, platform.height))
+            pygame.draw.rect(screen, color, (*adjusted_pos, platform.width, platform.height))
         
         # Draw player
         player_pos = (player.rect.x - camera.x, player.rect.y - camera.y)
@@ -125,5 +135,3 @@ def start_game():
 
         pygame.display.flip()
         clock.tick(60)
-
-#start_game()
