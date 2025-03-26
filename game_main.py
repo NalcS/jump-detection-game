@@ -16,8 +16,8 @@ class Player:
         self.sprite_right = pygame.image.load(os.path.join('textures', 'player_right.png'))
         self.sprite_left = pygame.image.load(os.path.join('textures', 'player_left.png'))
         # Scale sprites to match player size
-        self.sprite_right = pygame.transform.scale(self.sprite_right, (30, 50))
-        self.sprite_left = pygame.transform.scale(self.sprite_left, (30, 50))
+        self.sprite_right = pygame.transform.scale(self.sprite_right, (self.rect.width, self.rect.height))
+        self.sprite_left = pygame.transform.scale(self.sprite_left, (self.rect.width, self.rect.height))
         self.current_sprite = self.sprite_right
 
     def update_sprite(self):
