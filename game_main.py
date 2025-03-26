@@ -179,13 +179,21 @@ def start_game(jump_queue, shutdown_event):
         # Update player sprite based on direction
         player.update_sprite()
 
-        # Jump processing
+        # Jump and direction processing
         current_time = pygame.time.get_ticks()
         try:
             while True:
-                force = jump_queue.get_nowait()
-                if 5 <= force <= MAX_JUMP_FORCE:
-                    jump_force_buffer.append(force)
+                msg = jump_queue.get_nowait()
+                if isinstance(msg, tuple):
+                    if msg[0] == "direction":
+                        # Continuously update facing direction
+                        player.facing = msg[1]
+                    elif msg[0] == "jump":
+                        # Update facing direction on jump as well
+                        force, direction = msg[1], msg[2]
+                        player.facing = direction
+                        if 5 <= force <= MAX_JUMP_FORCE:
+                            jump_force_buffer.append(force)
         except queue.Empty:
             pass
 

@@ -39,6 +39,9 @@ def start_jump_detection(jump_queue, shutdown_event):
         if not ret:
             break
 
+        # Flip the frame horizontally to mirror it
+        frame = cv2.flip(frame, 1)
+
         # Resize frame early for consistent processing
         new_width = int(frame.shape[1] * scale_factor)
         new_height = int(frame.shape[0] * scale_factor)
@@ -94,6 +97,13 @@ def start_jump_detection(jump_queue, shutdown_event):
 
         # Position processing with prediction
         if face_found:
+            # Determine facing direction based on horizontal position
+            frame_center_x = frame.shape[1] // 2
+            face_center_x = x + w // 2
+            facing_direction = "left" if face_center_x < frame_center_x else "right"
+            # Send direction update message continuously
+            jump_queue.put(("direction", facing_direction))
+
             # Store actual position
             position_history.append((current_time, y_pos))
             # Predict next position based on velocity
@@ -121,7 +131,8 @@ def start_jump_detection(jump_queue, shutdown_event):
                     (current_time - last_detection_time) > cooldown):
                     face_size = w * h if face_found else 2500  # Fallback size
                     jump_force = min((velocity / face_size) * 600, 20)
-                    jump_queue.put(jump_force)
+                    # Send jump message with force and current direction
+                    jump_queue.put(("jump", jump_force, facing_direction))
                     last_detection_time = current_time
                     position_history.clear()  # Reset after jump detection
 
