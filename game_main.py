@@ -116,7 +116,7 @@ def load_level(filename):
     
     return platforms, walls, start_platforms, start_x, start_y
 
-def start_game(jump_queue):
+def start_game(jump_queue, shutdown_event):
     pygame.init()
     screen_width = 800*1.25
     screen_height = 600*1.5
@@ -159,12 +159,13 @@ def start_game(jump_queue):
     background = ParallaxBackground(os.path.join('textures', 'background.png'), 
                                    screen_width, screen_height, level_height, 0.3)
 
-    while True:
+    while not shutdown_event.is_set():
         delta_time = clock.tick(60) / 1000.0
 
         # Event handling
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                shutdown_event.set()
                 pygame.quit()
                 sys.exit()
 

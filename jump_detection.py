@@ -5,9 +5,11 @@ import numpy as np
 
 scale_factor = 1.4
 
-def start_jump_detection(jump_queue):
+def start_jump_detection(jump_queue, shutdown_event):
     print("Starting jump detection with enhanced motion tracking...")
     
+    cv2.namedWindow("Jump Detection", cv2.WINDOW_GUI_NORMAL)
+
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print("Error: Could not open camera!")
@@ -32,7 +34,7 @@ def start_jump_detection(jump_queue):
     last_velocity = 0
     predicted_pos = None
 
-    while True:
+    while not shutdown_event.is_set():
         ret, frame = cap.read()
         if not ret:
             break
@@ -41,6 +43,7 @@ def start_jump_detection(jump_queue):
         new_width = int(frame.shape[1] * scale_factor)
         new_height = int(frame.shape[0] * scale_factor)
         frame = cv2.resize(frame, (new_width, new_height))
+        cv2.resizeWindow("Jump Detection", new_width, new_height)
         
         current_time = time.time()
         face_found = False
@@ -129,8 +132,9 @@ def start_jump_detection(jump_queue):
             cv2.putText(frame, "PREDICTING", (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
         
-        cv2.imshow("Jump Detection - Motion Compensated", frame)
+        cv2.imshow("Jump Detection", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
+            shutdown_event.set()
             break
 
     cap.release()
