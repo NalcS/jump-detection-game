@@ -130,7 +130,7 @@ def start_jump_detection(jump_queue, shutdown_event):
                 if (velocity > velocity_threshold and 
                     (current_time - last_detection_time) > cooldown):
                     face_size = w * h if face_found else 2500  # Fallback size
-                    jump_force = min((velocity / face_size) * 600, 20)
+                    jump_force = min((velocity / face_size) * 800, 20)
                     # Send jump message with force and current direction
                     jump_queue.put(("jump", jump_force, facing_direction))
                     last_detection_time = current_time
