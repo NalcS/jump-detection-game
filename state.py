@@ -1,0 +1,2 @@
+# state.py
+paused = False

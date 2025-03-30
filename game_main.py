@@ -1,9 +1,12 @@
+# game_main.py
 import pygame
 import sys
 import queue
 from collections import deque
 import os
+import state  # our pause flag
 
+# (Player, ParallaxBackground, load_textures, and load_level remain unchanged)
 class Player:
     def __init__(self, x, y):
         self.rect = pygame.Rect(x, y, 30, 50)
@@ -12,16 +15,13 @@ class Player:
         self.is_grounded = False
         self.speed = 5
         self.friction = 0.7
-        # Load player sprites
         self.sprite_right = pygame.image.load(os.path.join('textures', 'player_right.png'))
         self.sprite_left = pygame.image.load(os.path.join('textures', 'player_left.png'))
-        # Scale sprites to match player size
         self.sprite_right = pygame.transform.scale(self.sprite_right, (self.rect.width, self.rect.height))
         self.sprite_left = pygame.transform.scale(self.sprite_left, (self.rect.width, self.rect.height))
         self.current_sprite = self.sprite_right
 
     def update_sprite(self):
-        # Update the current sprite based on facing direction
         if self.facing == 'right':
             self.current_sprite = self.sprite_right
         else:
@@ -29,47 +29,26 @@ class Player:
 
 class ParallaxBackground:
     def __init__(self, image_path, screen_width, screen_height, level_height, parallax_factor=0.4):
-        # Load the background image
         self.original_image = pygame.image.load(image_path)
         self.original_width = self.original_image.get_width()
         self.original_height = self.original_image.get_height()
-        
-        # Calculate scaling factor while maintaining aspect ratio
-        # Make background at least 1.5x the screen width, height calculated to maintain ratio
         width_scale = (screen_width * 1.7) / self.original_width
-        
-        # Calculate new dimensions preserving aspect ratio
         self.width = int(self.original_width * width_scale)
         self.height = int(self.original_height * width_scale)
-        
-        # Store screen and level parameters for position calculations
         self.screen_height = screen_height
         self.level_height = level_height
-        
-        # Scale the image maintaining aspect ratio
         self.image = pygame.transform.scale(self.original_image, (self.width, self.height))
-        self.parallax_factor = parallax_factor  # How much slower the background moves
+        self.parallax_factor = parallax_factor
 
     def draw(self, screen, camera, level_width, level_height):
-        # Calculate horizontal center of the level
         level_center_x = level_width / 2
-        
-        # For horizontal positioning: center the background
         bg_x = -camera.x * self.parallax_factor + (level_center_x - self.width / 2)
-        
-        # For vertical positioning: align the bottom of the background with bottom of level plus a small offset
-        # This ensures the background bottom is just outside camera view when at level bottom
-        bottom_offset = self.screen_height * 0.5  # 50% of screen height as offset
+        bottom_offset = self.screen_height * 0.5
         bg_y = level_height - self.height + bottom_offset
-        
-        # Apply parallax effect to vertical position too
         bg_y = bg_y - camera.y * self.parallax_factor
-        
-        # Draw the background
         screen.blit(self.image, (bg_x, bg_y))
 
 def load_textures():
-    # Load and scale platform and wall textures
     textures = {
         'platform': pygame.transform.scale(
             pygame.image.load(os.path.join('textures', 'platform.png')), (64, 64)
@@ -95,41 +74,72 @@ def load_level(filename):
         for y, line in enumerate(f):
             for x, char in enumerate(line.strip()):
                 if char in ('G', 'P', 'S', 'W'):
-                    # Create platform with grid alignment check
                     if (x * 64) % 64 == 0 and (y * 64) % 64 == 0:
                         platform = pygame.Rect(x*64, y*64, 64, 64)
-                        
-                        if char == 'G':  # Wall
+                        if char == 'G':
                             walls.append(platform)
-                        elif char == 'S':  # Start platform
+                        elif char == 'S':
                             start_platforms.append(platform)
                             if not found_start:
                                 start_x = x*64 + (64 - 30) // 2
                                 start_y = y*64 - 50
                                 found_start = True
-                        else:  # Regular platform
+                        else:
                             platforms.append(platform)
     
-    # Add safety walls if missing
     if not any(p.y == 0 for p in platforms) and not any(w.y == 0 for w in walls):
         walls.append(pygame.Rect(0, 0, 800, 10))
     
     return platforms, walls, start_platforms, start_x, start_y
 
+def pause_menu(screen, clock, screen_width, screen_height):
+    # Set pause flag so jump detection stops
+    import state
+    state.paused = True
+    overlay = pygame.Surface((screen_width, screen_height))
+    overlay.set_alpha(50)  # Slightly more transparent overlay
+    overlay.fill((0, 0, 0))
+
+    font = pygame.font.SysFont(None, 40)
+    resume_rect = pygame.Rect(screen_width//2 - 100, screen_height//2 - 60, 200, 50)
+    menu_rect = pygame.Rect(screen_width//2 - 100, screen_height//2 + 10, 200, 50)
+    
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    state.paused = False
+                    return "resume"
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if resume_rect.collidepoint(event.pos):
+                    state.paused = False
+                    return "resume"
+                if menu_rect.collidepoint(event.pos):
+                    # Do not quit completely, just return to main menu.
+                    return "main_menu"
+
+        screen.blit(overlay, (0, 0))
+        pygame.draw.rect(screen, (150, 150, 150), resume_rect)
+        pygame.draw.rect(screen, (150, 150, 150), menu_rect)
+        resume_text = font.render("Resume", True, (255, 255, 255))
+        menu_text = font.render("Quit", True, (255, 255, 255))
+        screen.blit(resume_text, resume_text.get_rect(center=resume_rect.center))
+        screen.blit(menu_text, menu_text.get_rect(center=menu_rect.center))
+        pygame.display.flip()
+        clock.tick(60)
+
+
 def start_game(jump_queue, shutdown_event):
     pygame.init()
-    screen_width = 800*1.25
-    screen_height = 600*1.5
+    screen_width = int(800*1.25)
+    screen_height = int(600*1.5)
     screen = pygame.display.set_mode((screen_width, screen_height))
     pygame.display.set_caption("JIJI - Enhanced Graphics Version")
-
-    # Colors (for fallback)
     WHITE = (255, 255, 255)
-    RED = (255, 0, 0)
-    GREEN = (0, 255, 0)
-    BLUE = (0, 0, 255)
     
-    # Physics constants
     GRAVITY = 0.5
     MAX_JUMP_FORCE = 30
     JUMP_COOLDOWN = 400  # ms
@@ -137,59 +147,63 @@ def start_game(jump_queue, shutdown_event):
     PLATFORM_MARGIN = 4
     MAX_FALL_SPEED = 25
 
-    # Load textures
     textures = load_textures()
-
-    # Load level
     platforms, walls, start_platforms, start_x, start_y = load_level('level3.txt')
     player = Player(start_x, start_y)
     camera = pygame.math.Vector2(0, 0)
     
-    # Jump system
     jump_force_buffer = deque(maxlen=3)
     last_jump_time = 0
-    clock = pygame.time.Clock()
     
-    # Calculate level boundaries - include walls in calculation
     all_objects = platforms + walls + start_platforms
     level_width = max(p.x for p in all_objects) + 64 if all_objects else 800
     level_height = max(p.y for p in all_objects) + 64 if all_objects else 600
 
-    # Load parallax background
     background = ParallaxBackground(os.path.join('textures', 'background.png'), 
                                    screen_width, screen_height, level_height, 0.3)
 
-    while not shutdown_event.is_set():
+    clock = pygame.time.Clock()
+    # Define pause button on the left side
+    pause_button = pygame.Rect(10, 10, 40, 40)  # Positioned at top-lef
+
+    running = True
+    while running and not shutdown_event.is_set():
         delta_time = clock.tick(60) / 1000.0
 
-        # Event handling
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 shutdown_event.set()
                 pygame.quit()
                 sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    action = pause_menu(screen, clock, screen_width, screen_height)
+                    if action == "main_menu":
+                        shutdown_event.set()
+                        running = False
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if pause_button.collidepoint(event.pos):
+                    action = pause_menu(screen, clock, screen_width, screen_height)
+                    if action == "main_menu":
+                        shutdown_event.set()
+                        running = False
 
-        # Input processing
         keys = pygame.key.get_pressed()
         if keys[pygame.K_LEFT]:
             player.facing = 'left'
         if keys[pygame.K_RIGHT]:
             player.facing = 'right'
         
-        # Update player sprite based on direction
         player.update_sprite()
 
-        # Jump and direction processing
         current_time = pygame.time.get_ticks()
         try:
             while True:
                 msg = jump_queue.get_nowait()
                 if isinstance(msg, tuple):
                     if msg[0] == "direction":
-                        # Continuously update facing direction
                         player.facing = msg[1]
                     elif msg[0] == "jump":
-                        # Update facing direction on jump as well
                         force, direction = msg[1], msg[2]
                         player.facing = direction
                         if 5 <= force <= MAX_JUMP_FORCE:
@@ -206,7 +220,6 @@ def start_game(jump_queue, shutdown_event):
                 last_jump_time = current_time
                 jump_force_buffer.clear()
 
-        # Physics updates
         player.velocity.y = min(player.velocity.y + GRAVITY * delta_time * 60, MAX_FALL_SPEED)
         
         if player.is_grounded:
@@ -214,7 +227,6 @@ def start_game(jump_queue, shutdown_event):
             if abs(player.velocity.x) < 0.5:
                 player.velocity.x = 0
 
-        # Horizontal movement and collision
         player.rect.x += player.velocity.x
         for obj in platforms + walls + start_platforms:
             if player.rect.colliderect(obj):
@@ -225,7 +237,6 @@ def start_game(jump_queue, shutdown_event):
                 player.velocity.x = 0
                 break
 
-        # Vertical movement and collision
         player.rect.y += player.velocity.y
         player.is_grounded = False
         for obj in platforms + walls + start_platforms:
@@ -238,42 +249,45 @@ def start_game(jump_queue, shutdown_event):
                 player.velocity.y = 0
                 break
 
-        # World boundaries
         player.rect.x = max(0, min(player.rect.x, level_width - player.rect.width))
         player.rect.y = max(0, min(player.rect.y, level_height - player.rect.height))
 
-        # Camera smoothing
         target_x = player.rect.centerx - screen_width // 2
         target_y = player.rect.centery - screen_height // 2
         camera.x += (target_x - camera.x) * 0.5 * delta_time * 60
         camera.y += (target_y - camera.y) * 0.5 * delta_time * 60
 
-        # Drawing - START WITH BACKGROUND
         screen.fill(WHITE)
-        
-        # Draw parallax background
         background.draw(screen, camera, level_width, level_height)
-        
-        # Draw platforms with textures
         for platform in platforms:
             adj_pos = (platform.x - camera.x, platform.y - camera.y)
             screen.blit(textures['platform'], adj_pos)
-        
-        # Draw walls with textures
         for wall in walls:
             adj_pos = (wall.x - camera.x, wall.y - camera.y)
             screen.blit(textures['wall'], adj_pos)
-        
-        # Draw start platforms with textures
         for start_platform in start_platforms:
             adj_pos = (start_platform.x - camera.x, start_platform.y - camera.y)
             screen.blit(textures['start'], adj_pos)
-        
-        # Draw player with appropriate sprite
         player_pos = (player.rect.x - camera.x, player.rect.y - camera.y)
         screen.blit(player.current_sprite, player_pos)
 
+        # Draw pause button (two centered vertical bars)
+        button_color = (50, 50, 50)
+        # Calculate dimensions for two bars centered inside pause_button
+        bar_width = 10
+        bar_height = 20
+        gap = 10
+        total_width = bar_width * 2 + gap
+        x_offset = pause_button.x + (pause_button.width - total_width) // 2
+        y_offset = pause_button.y + (pause_button.height - bar_height) // 2
+
+        first_bar = pygame.Rect(x_offset, y_offset, bar_width, bar_height)
+        second_bar = pygame.Rect(x_offset + bar_width + gap, y_offset, bar_width, bar_height)
+        pygame.draw.rect(screen, button_color, first_bar)
+        pygame.draw.rect(screen, button_color, second_bar)
+        # Draw a border around the entire pause button area
+        pygame.draw.rect(screen, button_color, pause_button, 2)
+
         pygame.display.flip()
 
-if __name__ == "__main__":
-    start_game(queue.Queue())
+    pygame.quit()
