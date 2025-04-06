@@ -254,8 +254,21 @@ def start_game(jump_queue, shutdown_event):
 
         target_x = player.rect.centerx - screen_width // 2
         target_y = player.rect.centery - screen_height // 2
-        camera.x += (target_x - camera.x) * 0.5 * delta_time * 60
-        camera.y += (target_y - camera.y) * 0.5 * delta_time * 60
+        # Use this camera lerp with clamped max movement:
+        lerp_speed = 0.1  # Lower value = smoother but slower camera
+        max_movement = 15  # Maximum camera movement per frame
+
+        # Calculate desired movement
+        dx = (target_x - camera.x) * lerp_speed
+        dy = (target_y - camera.y) * lerp_speed
+
+        # Clamp movement to prevent large jumps
+        dx = max(min(dx, max_movement), -max_movement)
+        dy = max(min(dy, max_movement), -max_movement)
+
+        # Apply movement
+        camera.x += dx
+        camera.y += dy
 
         screen.fill(WHITE)
         background.draw(screen, camera, level_width, level_height)
