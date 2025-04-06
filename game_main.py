@@ -1,4 +1,5 @@
 # game_main.py
+import time
 import pygame
 import sys
 import queue
@@ -62,10 +63,31 @@ def load_textures():
     }
     return textures
 
+# Modified game_main.py sections
+
+def render_text_with_outline(surface, text, font, text_color, outline_color, position):
+    """Render text with an outline effect by drawing the text multiple times with offsets."""
+    text_surface = font.render(text, True, outline_color)
+    offset = 2  # Thickness of outline
+    
+    # Draw outline positions
+    for dx, dy in [(-offset, -offset), (-offset, 0), (-offset, offset), 
+                   (0, -offset), (0, offset),
+                   (offset, -offset), (offset, 0), (offset, offset)]:
+        outline_rect = text_surface.get_rect(topright=(position[0] + dx, position[1] + dy))
+        surface.blit(text_surface, outline_rect)
+    
+    # Draw main text
+    main_text_surface = font.render(text, True, text_color)
+    main_rect = main_text_surface.get_rect(topright=position)
+    surface.blit(main_text_surface, main_rect)
+
+
 def load_level(filename):
     platforms = []
     walls = []
     start_platforms = []
+    end_triggers = []  # New list for end trigger areas
     start_x = 100
     start_y = 100
     found_start = False
@@ -73,7 +95,7 @@ def load_level(filename):
     with open(filename, 'r') as f:
         for y, line in enumerate(f):
             for x, char in enumerate(line.strip()):
-                if char in ('G', 'P', 'S', 'W'):
+                if char in ('G', 'P', 'S', 'W', 'E'):  # Added 'E' for end trigger
                     if (x * 64) % 64 == 0 and (y * 64) % 64 == 0:
                         platform = pygame.Rect(x*64, y*64, 64, 64)
                         if char == 'G':
@@ -84,13 +106,79 @@ def load_level(filename):
                                 start_x = x*64 + (64 - 30) // 2
                                 start_y = y*64 - 50
                                 found_start = True
+                        elif char == 'E':  # Handle end trigger areas
+                            end_triggers.append(platform)
                         else:
                             platforms.append(platform)
     
     if not any(p.y == 0 for p in platforms) and not any(w.y == 0 for w in walls):
         walls.append(pygame.Rect(0, 0, 800, 10))
     
-    return platforms, walls, start_platforms, start_x, start_y
+    return platforms, walls, start_platforms, end_triggers, start_x, start_y
+
+def load_textures():
+    textures = {
+        'platform': pygame.transform.scale(
+            pygame.image.load(os.path.join('textures', 'platform.png')), (64, 64)
+        ),
+        'wall': pygame.transform.scale(
+            pygame.image.load(os.path.join('textures', 'wall.png')), (64, 64)
+        ),
+        'start': pygame.transform.scale(
+            pygame.image.load(os.path.join('textures', 'platform.png')), (64, 64)
+        ),
+        'end': pygame.transform.scale(  # New texture for end trigger
+            pygame.image.load(os.path.join('textures', 'platform.png')), (64, 64)
+        )
+    }
+    # Add a color overlay to the end texture to distinguish it
+    end_surface = textures['end'].copy()
+    overlay = pygame.Surface((64, 64), pygame.SRCALPHA)
+    overlay.fill((0, 255, 0, 100))  # Green semi-transparent overlay
+    end_surface.blit(overlay, (0, 0))
+    textures['end'] = end_surface
+    
+    return textures
+
+def show_completion_screen(screen, clock, screen_width, screen_height, completion_time):
+    overlay = pygame.Surface((screen_width, screen_height))
+    overlay.set_alpha(150)
+    overlay.fill((0, 0, 0))
+
+    font_large = pygame.font.SysFont(None, 60)
+    font_medium = pygame.font.SysFont(None, 40)
+    
+    # Format completion time (seconds) to minutes:seconds.milliseconds
+    minutes = int(completion_time // 60)
+    seconds = int(completion_time % 60)
+    milliseconds = int((completion_time % 1) * 1000)
+    time_text = f"{minutes:02d}:{seconds:02d}.{milliseconds:03d}"
+    
+    title_text = font_large.render("Level Complete!", True, (255, 255, 255))
+    time_display = font_medium.render(f"Your Time: {time_text}", True, (255, 255, 255))
+    continue_text = font_medium.render("Press any key to continue", True, (255, 255, 255))
+    
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                return "main_menu"
+        
+        screen.blit(overlay, (0, 0))
+        screen.blit(title_text, title_text.get_rect(center=(screen_width//2, screen_height//2 - 60)))
+        screen.blit(time_display, time_display.get_rect(center=(screen_width//2, screen_height//2)))
+        screen.blit(continue_text, continue_text.get_rect(center=(screen_width//2, screen_height//2 + 60)))
+        
+        pygame.display.flip()
+        clock.tick(60)
+
+def format_time(seconds):
+    minutes = int(seconds // 60)
+    seconds = int(seconds % 60)
+    milliseconds = int((seconds % 1) * 100)
+    return f"{minutes:02d}:{seconds:02d}.{milliseconds:02d}"
 
 def pause_menu(screen, clock, screen_width, screen_height):
     # Set pause flag so jump detection stops
@@ -131,7 +219,6 @@ def pause_menu(screen, clock, screen_width, screen_height):
         pygame.display.flip()
         clock.tick(60)
 
-
 def start_game(jump_queue, shutdown_event):
     pygame.init()
     screen_width = int(800*1.25)
@@ -148,14 +235,14 @@ def start_game(jump_queue, shutdown_event):
     MAX_FALL_SPEED = 25
 
     textures = load_textures()
-    platforms, walls, start_platforms, start_x, start_y = load_level('level3.txt')
+    platforms, walls, start_platforms, end_triggers, start_x, start_y = load_level('level1.txt')
     player = Player(start_x, start_y)
     camera = pygame.math.Vector2(0, 0)
     
     jump_force_buffer = deque(maxlen=3)
     last_jump_time = 0
     
-    all_objects = platforms + walls + start_platforms
+    all_objects = platforms + walls + start_platforms + end_triggers
     level_width = max(p.x for p in all_objects) + 64 if all_objects else 800
     level_height = max(p.y for p in all_objects) + 64 if all_objects else 600
 
@@ -164,7 +251,17 @@ def start_game(jump_queue, shutdown_event):
 
     clock = pygame.time.Clock()
     # Define pause button on the left side
-    pause_button = pygame.Rect(10, 10, 40, 40)  # Positioned at top-lef
+    pause_button = pygame.Rect(10, 10, 40, 40)  # Positioned at top-left
+
+    # Timer variables
+    start_time = time.time()
+    pause_start_time = 0
+    total_pause_time = 0
+    level_completed = False
+    completion_time = 0
+    
+    # Font for timer display
+    timer_font = pygame.font.SysFont(None, 36)
 
     running = True
     while running and not shutdown_event.is_set():
@@ -177,98 +274,110 @@ def start_game(jump_queue, shutdown_event):
                 sys.exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
+                    pause_start_time = time.time()
                     action = pause_menu(screen, clock, screen_width, screen_height)
+                    total_pause_time += time.time() - pause_start_time
                     if action == "main_menu":
                         shutdown_event.set()
                         running = False
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if pause_button.collidepoint(event.pos):
+                    pause_start_time = time.time()
                     action = pause_menu(screen, clock, screen_width, screen_height)
+                    total_pause_time += time.time() - pause_start_time
                     if action == "main_menu":
                         shutdown_event.set()
                         running = False
 
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_LEFT]:
-            player.facing = 'left'
-        if keys[pygame.K_RIGHT]:
-            player.facing = 'right'
-        
-        player.update_sprite()
+        # Skip game logic if level is completed
+        if not level_completed:
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_LEFT]:
+                player.facing = 'left'
+            if keys[pygame.K_RIGHT]:
+                player.facing = 'right'
+            
+            player.update_sprite()
 
-        current_time = pygame.time.get_ticks()
-        try:
-            while True:
-                msg = jump_queue.get_nowait()
-                if isinstance(msg, tuple):
-                    if msg[0] == "direction":
-                        player.facing = msg[1]
-                    elif msg[0] == "jump":
-                        force, direction = msg[1], msg[2]
-                        player.facing = direction
-                        if 5 <= force <= MAX_JUMP_FORCE:
-                            jump_force_buffer.append(force)
-        except queue.Empty:
-            pass
+            current_time = pygame.time.get_ticks()
+            try:
+                while True:
+                    msg = jump_queue.get_nowait()
+                    if isinstance(msg, tuple):
+                        if msg[0] == "direction":
+                            player.facing = msg[1]
+                        elif msg[0] == "jump":
+                            force, direction = msg[1], msg[2]
+                            player.facing = direction
+                            if 5 <= force <= MAX_JUMP_FORCE:
+                                jump_force_buffer.append(force)
+            except queue.Empty:
+                pass
 
-        if jump_force_buffer and player.is_grounded:
-            if (current_time - last_jump_time) > JUMP_COOLDOWN:
-                avg_force = sum(jump_force_buffer) / len(jump_force_buffer)
-                player.velocity.y = -avg_force
-                player.velocity.x = player.speed if player.facing == 'right' else -player.speed
-                player.is_grounded = False
-                last_jump_time = current_time
-                jump_force_buffer.clear()
+            if jump_force_buffer and player.is_grounded:
+                if (current_time - last_jump_time) > JUMP_COOLDOWN:
+                    avg_force = sum(jump_force_buffer) / len(jump_force_buffer)
+                    player.velocity.y = -avg_force
+                    player.velocity.x = player.speed if player.facing == 'right' else -player.speed
+                    player.is_grounded = False
+                    last_jump_time = current_time
+                    jump_force_buffer.clear()
 
-        player.velocity.y = min(player.velocity.y + GRAVITY * delta_time * 60, MAX_FALL_SPEED)
-        
-        if player.is_grounded:
-            player.velocity.x *= player.friction ** (delta_time * 60)
-            if abs(player.velocity.x) < 0.5:
-                player.velocity.x = 0
+            player.velocity.y = min(player.velocity.y + GRAVITY * delta_time * 60, MAX_FALL_SPEED)
+            
+            if player.is_grounded:
+                player.velocity.x *= player.friction ** (delta_time * 60)
+                if abs(player.velocity.x) < 0.5:
+                    player.velocity.x = 0
 
-        player.rect.x += player.velocity.x
-        for obj in platforms + walls + start_platforms:
-            if player.rect.colliderect(obj):
-                if player.velocity.x > 0:
-                    player.rect.right = obj.left - PLATFORM_MARGIN
-                elif player.velocity.x < 0:
-                    player.rect.left = obj.right + PLATFORM_MARGIN
-                player.velocity.x = 0
-                break
+            player.rect.x += player.velocity.x
+            for obj in platforms + walls + start_platforms:
+                if player.rect.colliderect(obj):
+                    if player.velocity.x > 0:
+                        player.rect.right = obj.left - PLATFORM_MARGIN
+                    elif player.velocity.x < 0:
+                        player.rect.left = obj.right + PLATFORM_MARGIN
+                    player.velocity.x = 0
+                    break
 
-        player.rect.y += player.velocity.y
-        player.is_grounded = False
-        for obj in platforms + walls + start_platforms:
-            if player.rect.colliderect(obj):
-                if player.velocity.y > 0:
-                    player.rect.bottom = obj.top - COLLISION_PADDING
-                    player.is_grounded = True
-                elif player.velocity.y < 0:
-                    player.rect.top = obj.bottom + COLLISION_PADDING
-                player.velocity.y = 0
-                break
+            player.rect.y += player.velocity.y
+            player.is_grounded = False
+            for obj in platforms + walls + start_platforms:
+                if player.rect.colliderect(obj):
+                    if player.velocity.y > 0:
+                        player.rect.bottom = obj.top - COLLISION_PADDING
+                        player.is_grounded = True
+                    elif player.velocity.y < 0:
+                        player.rect.top = obj.bottom + COLLISION_PADDING
+                    player.velocity.y = 0
+                    break
 
-        player.rect.x = max(0, min(player.rect.x, level_width - player.rect.width))
-        player.rect.y = max(0, min(player.rect.y, level_height - player.rect.height))
+            # Check for collision with end triggers
+            for end_trigger in end_triggers:
+                if player.rect.colliderect(end_trigger):
+                    level_completed = True
+                    completion_time = time.time() - start_time - total_pause_time
+                    break
 
-        target_x = player.rect.centerx - screen_width // 2
-        target_y = player.rect.centery - screen_height // 2
-        # Use this camera lerp with clamped max movement:
-        lerp_speed = 0.1  # Lower value = smoother but slower camera
-        max_movement = 15  # Maximum camera movement per frame
+            player.rect.x = max(0, min(player.rect.x, level_width - player.rect.width))
+            player.rect.y = max(0, min(player.rect.y, level_height - player.rect.height))
 
-        # Calculate desired movement
-        dx = (target_x - camera.x) * lerp_speed
-        dy = (target_y - camera.y) * lerp_speed
+            target_x = player.rect.centerx - screen_width // 2
+            target_y = player.rect.centery - screen_height // 2
+            lerp_speed = 0.1  # Lower value = smoother but slower camera
+            max_movement = 15  # Maximum camera movement per frame
 
-        # Clamp movement to prevent large jumps
-        dx = max(min(dx, max_movement), -max_movement)
-        dy = max(min(dy, max_movement), -max_movement)
+            # Calculate desired movement
+            dx = (target_x - camera.x) * lerp_speed
+            dy = (target_y - camera.y) * lerp_speed
 
-        # Apply movement
-        camera.x += dx
-        camera.y += dy
+            # Clamp movement to prevent large jumps
+            dx = max(min(dx, max_movement), -max_movement)
+            dy = max(min(dy, max_movement), -max_movement)
+
+            # Apply movement
+            camera.x += dx
+            camera.y += dy
 
         screen.fill(WHITE)
         background.draw(screen, camera, level_width, level_height)
@@ -281,12 +390,15 @@ def start_game(jump_queue, shutdown_event):
         for start_platform in start_platforms:
             adj_pos = (start_platform.x - camera.x, start_platform.y - camera.y)
             screen.blit(textures['start'], adj_pos)
+        for end_trigger in end_triggers:
+            adj_pos = (end_trigger.x - camera.x, end_trigger.y - camera.y)
+            screen.blit(textures['end'], adj_pos)
+        
         player_pos = (player.rect.x - camera.x, player.rect.y - camera.y)
         screen.blit(player.current_sprite, player_pos)
 
-        # Draw pause button (two centered vertical bars)
+        # Draw pause button
         button_color = (50, 50, 50)
-        # Calculate dimensions for two bars centered inside pause_button
         bar_width = 10
         bar_height = 20
         gap = 10
@@ -298,9 +410,31 @@ def start_game(jump_queue, shutdown_event):
         second_bar = pygame.Rect(x_offset + bar_width + gap, y_offset, bar_width, bar_height)
         pygame.draw.rect(screen, button_color, first_bar)
         pygame.draw.rect(screen, button_color, second_bar)
-        # Draw a border around the entire pause button area
         pygame.draw.rect(screen, button_color, pause_button, 2)
 
+        # Display timer in top right corner
+        if not level_completed:
+            current_time = time.time() - start_time - total_pause_time
+            timer_text = format_time(current_time)
+        else:
+            timer_text = format_time(completion_time)
+        
+        render_text_with_outline(
+            screen, 
+            timer_text, 
+            timer_font, 
+            (0, 0, 0),  # Text color (black)
+            (255, 255, 255),  # Outline color (white)
+            (screen_width - 20, 20)  # Position (top right)
+        )
+
         pygame.display.flip()
+        
+        # Show completion screen if level is completed
+        if level_completed:
+            action = show_completion_screen(screen, clock, screen_width, screen_height, completion_time)
+            if action == "main_menu":
+                shutdown_event.set()
+                running = False
 
     pygame.quit()
