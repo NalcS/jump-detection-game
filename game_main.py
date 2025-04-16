@@ -235,7 +235,7 @@ def start_game(jump_queue, shutdown_event):
     MAX_FALL_SPEED = 25
 
     textures = load_textures()
-    platforms, walls, start_platforms, end_triggers, start_x, start_y = load_level('level1.txt')
+    platforms, walls, start_platforms, end_triggers, start_x, start_y = load_level('level4.txt')
     player = Player(start_x, start_y)
     camera = pygame.math.Vector2(0, 0)
     
