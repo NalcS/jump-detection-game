@@ -29,39 +29,58 @@ class Player:
             self.current_sprite = self.sprite_left
 
 class ParallaxBackground:
-    def __init__(self, image_path, screen_width, screen_height, level_height, parallax_factor=0.4):
+    def __init__(self, image_path, screen_width, screen_height, level_width, level_height, parallax_factor=0.4):
+        # Load original image and get its dimensions.
         self.original_image = pygame.image.load(image_path)
         self.original_width = self.original_image.get_width()
         self.original_height = self.original_image.get_height()
-        width_scale = (screen_width * 1.7) / self.original_width
-        self.width = int(self.original_width * width_scale)
-        self.height = int(self.original_height * width_scale)
-        self.screen_height = screen_height
-        self.level_height = level_height
+        
+        # Compute scale factors:
+        # We scale based on the level dimensions and screen dimensions to ensure coverage even when offset.
+        scale_w_level = level_width / self.original_width
+        scale_h_level = level_height / self.original_height
+        scale_w_screen = screen_width / self.original_width
+        scale_h_screen = screen_height / self.original_height
+        
+        # Use the maximum factor to guarantee coverage.
+        scale_factor = max(scale_w_level, scale_h_level, scale_w_screen, scale_h_screen)
+        
+        self.width = int(self.original_width * scale_factor)
+        self.height = int(self.original_height * scale_factor)
         self.image = pygame.transform.scale(self.original_image, (self.width, self.height))
+        
+        # Store parameters for drawing
+        self.level_width = level_width
+        self.level_height = level_height
         self.parallax_factor = parallax_factor
+        self.screen_width = screen_width
+        self.screen_height = screen_height
 
-    def draw(self, screen, camera, level_width, level_height):
-        level_center_x = level_width / 2
-        bg_x = -camera.x * self.parallax_factor + (level_center_x - self.width / 2)
-        bottom_offset = self.screen_height * 0.5
-        bg_y = level_height - self.height + bottom_offset
-        bg_y = bg_y - camera.y * self.parallax_factor
-        screen.blit(self.image, (bg_x, bg_y))
+    def draw(self, screen, camera):
+        # Compute a base position: horizontally center the background relative to the level,
+        # and position its bottom so that it aligns with the level's bottom.
+        base_x = self.level_width / 2 - self.width / 2
+        base_y = self.level_height - self.height
+        
+        # Subtract the parallax-induced offset.
+        draw_x = base_x - camera.x * self.parallax_factor
+        draw_y = base_y - camera.y * self.parallax_factor
 
-def load_textures():
-    textures = {
-        'platform': pygame.transform.scale(
-            pygame.image.load(os.path.join('textures', 'platform.png')), (64, 64)
-        ),
-        'wall': pygame.transform.scale(
-            pygame.image.load(os.path.join('textures', 'wall.png')), (64, 64)
-        ),
-        'start': pygame.transform.scale(
-            pygame.image.load(os.path.join('textures', 'platform.png')), (64, 64)
-        )
-    }
-    return textures
+        # Clamp horizontally so that the background always covers the screen:
+        # If the drawn x position is too far right (gap on left) or too far left (gap on right),
+        # adjust it.
+        if draw_x > 0:
+            draw_x = 0
+        elif draw_x + self.width < self.screen_width:
+            draw_x = self.screen_width - self.width
+
+        # Similarly, clamp vertically if needed (this ensures the top of the screen is covered).
+        if draw_y > 0:
+            draw_y = 0
+        elif draw_y + self.height < self.screen_height:
+            draw_y = self.screen_height - self.height
+
+        screen.blit(self.image, (draw_x, draw_y))
 
 # Modified game_main.py sections
 
@@ -245,9 +264,14 @@ def start_game(jump_queue, shutdown_event):
     all_objects = platforms + walls + start_platforms + end_triggers
     level_width = max(p.x for p in all_objects) + 64 if all_objects else 800
     level_height = max(p.y for p in all_objects) + 64 if all_objects else 600
-
-    background = ParallaxBackground(os.path.join('textures', 'background.png'), 
-                                   screen_width, screen_height, level_height, 0.3)
+    background = ParallaxBackground(
+        os.path.join('textures', 'background.png'),
+        screen_width,
+        screen_height,
+        level_width,
+        level_height,
+        0.3  # The chosen parallax factor.
+    )
 
     clock = pygame.time.Clock()
     # Define pause button on the left side
@@ -380,7 +404,7 @@ def start_game(jump_queue, shutdown_event):
             camera.y += dy
 
         screen.fill(WHITE)
-        background.draw(screen, camera, level_width, level_height)
+        background.draw(screen, camera)
         for platform in platforms:
             adj_pos = (platform.x - camera.x, platform.y - camera.y)
             screen.blit(textures['platform'], adj_pos)
