@@ -243,7 +243,7 @@ def start_game(jump_queue, shutdown_event):
     screen_width = int(800*1.25)
     screen_height = int(600*1.5)
     screen = pygame.display.set_mode((screen_width, screen_height))
-    pygame.display.set_caption("JIJI - Enhanced Graphics Version")
+    pygame.display.set_caption("JIJI")
     WHITE = (255, 255, 255)
     
     GRAVITY = 0.5
