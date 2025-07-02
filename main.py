@@ -4,6 +4,8 @@ import queue
 import jump_detection
 import game_main
 import menu
+import os
+import sys
 
 if __name__ == "__main__":
     choice = menu.main_menu()
@@ -26,3 +28,17 @@ if __name__ == "__main__":
     # Wait for both threads to finish
     thread_game.join()
     thread_cv.join()
+
+
+
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+

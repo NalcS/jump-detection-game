@@ -6,6 +6,7 @@ import queue
 from collections import deque
 import os
 import state  # our pause flag
+import main
 
 # (Player, ParallaxBackground, load_textures, and load_level remain unchanged)
 class Player:
@@ -16,8 +17,8 @@ class Player:
         self.is_grounded = False
         self.speed = 5
         self.friction = 0.7
-        self.sprite_right = pygame.image.load(os.path.join('textures', 'player_right.png'))
-        self.sprite_left = pygame.image.load(os.path.join('textures', 'player_left.png'))
+        self.sprite_right = pygame.image.load(main.resource_path(os.path.join('textures', 'player_right.png')))
+        self.sprite_left = pygame.image.load(main.resource_path(os.path.join('textures', 'player_left.png')))
         self.sprite_right = pygame.transform.scale(self.sprite_right, (self.rect.width, self.rect.height))
         self.sprite_left = pygame.transform.scale(self.sprite_left, (self.rect.width, self.rect.height))
         self.current_sprite = self.sprite_right
@@ -31,7 +32,7 @@ class Player:
 class ParallaxBackground:
     def __init__(self, image_path, screen_width, screen_height, level_width, level_height, parallax_factor=0.4):
         # Load original image and get its dimensions.
-        self.original_image = pygame.image.load(image_path)
+        self.original_image = pygame.image.load(main.resource_path(image_path))
         self.original_width = self.original_image.get_width()
         self.original_height = self.original_image.get_height()
         
@@ -138,16 +139,16 @@ def load_level(filename):
 def load_textures():
     textures = {
         'platform': pygame.transform.scale(
-            pygame.image.load(os.path.join('textures', 'platform.png')), (64, 64)
+            pygame.image.load(main.resource_path(os.path.join('textures', 'platform.png'))), (64, 64)
         ),
         'wall': pygame.transform.scale(
-            pygame.image.load(os.path.join('textures', 'wall.png')), (64, 64)
+            pygame.image.load(main.resource_path(os.path.join('textures', 'wall.png'))), (64, 64)
         ),
         'start': pygame.transform.scale(
-            pygame.image.load(os.path.join('textures', 'platform.png')), (64, 64)
+            pygame.image.load(main.resource_path(os.path.join('textures', 'platform.png'))), (64, 64)
         ),
         'end': pygame.transform.scale(  # New texture for end trigger
-            pygame.image.load(os.path.join('textures', 'platform.png')), (64, 64)
+            pygame.image.load(main.resource_path(os.path.join('textures', 'platform.png'))), (64, 64)
         )
     }
     # Add a color overlay to the end texture to distinguish it
@@ -254,7 +255,7 @@ def start_game(jump_queue, shutdown_event):
     MAX_FALL_SPEED = 25
 
     textures = load_textures()
-    platforms, walls, start_platforms, end_triggers, start_x, start_y = load_level('level4.txt')
+    platforms, walls, start_platforms, end_triggers, start_x, start_y = load_level(main.resource_path('level4.txt'))
     player = Player(start_x, start_y)
     camera = pygame.math.Vector2(0, 0)
     

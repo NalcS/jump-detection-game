@@ -4,6 +4,19 @@ import time
 from collections import deque
 import numpy as np
 import state  # import our pause flag
+import os
+import sys
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
 
 scale_factor = 1.4
 
@@ -17,9 +30,13 @@ def start_jump_detection(jump_queue, shutdown_event):
         print("Error: Could not open camera!")
         return
     
+    # WHEN RUNNING PROGRAM:
     face_cascade = cv2.CascadeClassifier(
         cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
     )
+    # WHEN BUILDING THE EXE:
+    # cascade_path = resource_path("cv2/data/haarcascade_frontalface_default.xml")
+    # face_cascade = cv2.CascadeClassifier(cascade_path)
     
     tracker = None
     detection_interval = 8
